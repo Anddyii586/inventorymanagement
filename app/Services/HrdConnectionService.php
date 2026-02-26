@@ -39,10 +39,11 @@ class HrdConnectionService
     public static function isAvailable(int $timeout = 2): bool
     {
         // Allow disabling HRD checks via environment variable (useful for local development)
-        if (env('HRD_DISABLED', false)) {
+        // Use filter_var to properly handle string 'false' from env variables
+        if (filter_var(env('HRD_DISABLED', false), FILTER_VALIDATE_BOOLEAN)) {
             return false;
         }
-        
+
         // Store original timeout setting
         $originalTimeout = ini_get('max_execution_time');
         
@@ -54,13 +55,13 @@ class HrdConnectionService
             // This prevents PDO from hanging on connection attempts
             $config = self::getHrdConfig();
             if ($config && isset($config['host']) && isset($config['port'])) {
-                // Use very short timeout (0.5 seconds) for socket check
-                $connection = @fsockopen($config['host'], $config['port'], $errno, $errstr, 0.5);
+                // Use very short timeout (1 second) for socket check
+                $connection = @fsockopen($config['host'], $config['port'], $errno, $errstr, 1);
                 if (!$connection) {
                     // Can't reach host/port, clear cache and return false immediately
                     Cache::forget('hrd_connection_available');
-                    if ($originalTimeout !== false && $originalTimeout > 0) {
-                        @set_time_limit($originalTimeout);
+                    if ($originalTimeout !== false && is_numeric($originalTimeout)) {
+                        set_time_limit((int)$originalTimeout);
                     }
                     return false;
                 }
@@ -78,16 +79,17 @@ class HrdConnectionService
             // If testing mode, temporarily override config
             if (env('HRD_TEST_HOST') || env('HRD_TEST_PORT')) {
                 $testConfig = self::getHrdConfig();
-                config(['database.connections.hrd' => array_merge(config('database.connections.hrd'), $testConfig)]);
+                $baseConfig = config('database.connections.hrd') ?? [];
+                config(['database.connections.hrd' => array_merge($baseConfig, $testConfig)]);
             }
             
             $result = DB::connection('hrd')->select('SELECT 1 as test');
-            
+
             // Restore original timeout
-            if ($originalTimeout !== false && $originalTimeout > 0) {
-                @set_time_limit($originalTimeout);
+            if ($originalTimeout !== false && is_numeric($originalTimeout)) {
+                set_time_limit((int)$originalTimeout);
             }
-            
+
             return !empty($result);
         } catch (Exception $e) {
             // Log the error for debugging (only in local environment)
@@ -97,24 +99,24 @@ class HrdConnectionService
             
             // Clear cache on failure to ensure next check is fresh
             Cache::forget('hrd_connection_available');
-            
+
             // Restore original timeout
-            if ($originalTimeout !== false && $originalTimeout > 0) {
-                @set_time_limit($originalTimeout);
+            if ($originalTimeout !== false && is_numeric($originalTimeout)) {
+                set_time_limit((int)$originalTimeout);
             }
-            
+
             return false;
         } catch (Throwable $e) {
             // Catch any other errors including fatal errors
             if (app()->environment('local')) {
                 Log::debug('HRD connection unavailable: ' . $e->getMessage());
             }
-            
+
             // Clear cache on failure to ensure next check is fresh
             Cache::forget('hrd_connection_available');
-            
-            if ($originalTimeout !== false && $originalTimeout > 0) {
-                @set_time_limit($originalTimeout);
+
+            if ($originalTimeout !== false && is_numeric($originalTimeout)) {
+                set_time_limit((int)$originalTimeout);
             }
             
             return false;
@@ -164,4 +166,3 @@ class HrdConnectionService
         }
     }
 }
-
