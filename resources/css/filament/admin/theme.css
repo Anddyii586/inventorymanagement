@@ -1,0 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;500;600;700&display=swap');
+@import '../../../../vendor/filament/filament/resources/css/theme.css';
+
+@config 'tailwind.config.js';
+
+.fi-topbar {
+    @apply bg-sky-500 border-b-0 shadow-md;
+}
+
+.fi-topbar .fi-logo,
+.fi-topbar .fi-btn,
+.fi-topbar .fi-dropdown-trigger {
+    @apply text-white;
+}
+
+.fi-topbar .fi-btn:hover {
+    @apply bg-sky-600;
+}
+
+.fi-user-menu .fi-btn-label {
+    @apply order-first mr-2;
+}
+
+.fi-user-menu .fi-btn {
+    @apply flex-row-reverse;
+}
