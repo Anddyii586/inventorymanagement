@@ -27,19 +27,29 @@ class KoreksiPencatatanController extends Controller
         $totalJumlah = 0;
         $totalHarga = 0;
 
+        // Filter out empty rows and calculate totals
+        $filteredRows = [];
         foreach ($rows as $r) {
-            $totalJumlah += isset($r['jumlah']) ? (int)$r['jumlah'] : 0;
-            $totalHarga += isset($r['harga']) ? (float)$r['harga'] : 0;
+            if (!empty($r['kode']) || !empty($r['nama']) || !empty($r['jumlah']) || !empty($r['harga'])) {
+                $filteredRows[] = $r;
+                $totalJumlah += isset($r['jumlah']) ? (int)$r['jumlah'] : 0;
+                $totalHarga += isset($r['harga']) ? (float)$r['harga'] : 0;
+            }
+        }
+
+        if (empty($filteredRows)) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['rows' => 'Minimal harus ada satu baris data yang diisi.']);
         }
 
         $koreksi = KoreksiPencatatan::create([
             'asset_type' => $data['asset_type'],
             'asset_id' => $data['asset_id'],
             'user_id' => Auth::id(),
-            'data' => $rows,
+            'data' => $filteredRows,
             'total_jumlah' => $totalJumlah,
             'total_harga' => $totalHarga,
-            'keterangan' => $request->input('keterangan'),
         ]);
 
         return redirect()->back()->with('koreksi_success', 'Koreksi pencatatan berhasil disimpan.');

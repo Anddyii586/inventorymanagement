@@ -116,38 +116,46 @@ class SsoSessionHelper
                 $requestUserAgent = $request->userAgent();
                 $sessionUserAgent = $session->user_agent ?? null;
                 
-                // SEMENTARA: Skip validasi user_agent untuk memastikan auto-login berfungsi
-                // TODO: Aktifkan kembali validasi setelah memastikan kolom user_agent ada dan formatnya benar
-                /*
+                // Validate user_agent (browser fingerprint) for security
+                // This prevents session reuse from different browsers/devices
                 if (!empty($sessionUserAgent) && !empty($requestUserAgent)) {
                     $sessionUserAgent = trim($sessionUserAgent);
                     $requestUserAgent = trim($requestUserAgent);
-                    
+
                     if ($sessionUserAgent !== $requestUserAgent) {
+                        \Log::debug('SSO Helper: User agent mismatch, session rejected', [
+                            'session_user_agent' => $sessionUserAgent,
+                            'request_user_agent' => $requestUserAgent,
+                        ]);
                         return null;
                     }
                 }
-                */
 
                 // Catatan: IP address tidak divalidasi karena bisa berubah saat user pindah network
                 // (misalnya dari WiFi ke tethering), yang akan mengganggu user experience
             }
 
-            // Decode session data
+            // Decode session data safely
             $sessionData = null;
             try {
                 $decoded = base64_decode($session->payload);
-                $sessionData = @unserialize($decoded);
+                if ($decoded === false) {
+                    throw new \Exception('Base64 decode failed');
+                }
+                $sessionData = unserialize($decoded, ['allowed_classes' => false]);
                 if ($sessionData === false) {
-                    throw new \Exception('Base64 unserialize returned false');
+                    throw new \Exception('Unserialize returned false');
                 }
             } catch (\Exception $e) {
                 try {
-                    $sessionData = @unserialize($session->payload);
+                    $sessionData = unserialize($session->payload, ['allowed_classes' => false]);
                     if ($sessionData === false) {
                         throw new \Exception('Direct unserialize returned false');
                     }
                 } catch (\Exception $e2) {
+                    \Log::debug('SSO Helper: Failed to decode session data', [
+                        'error' => $e2->getMessage(),
+                    ]);
                     return null;
                 }
             }
@@ -407,11 +415,14 @@ class SsoSessionHelper
                     try {
                         // Decode session untuk cek fingerprint
                         $decoded = base64_decode($session->payload);
-                        $sessionData = @unserialize($decoded);
-                        
+                        if ($decoded === false) {
+                            continue;
+                        }
+                        $sessionData = unserialize($decoded, ['allowed_classes' => false]);
+
                         if (!is_array($sessionData)) {
                             // Try direct unserialize
-                            $sessionData = @unserialize($session->payload);
+                            $sessionData = unserialize($session->payload, ['allowed_classes' => false]);
                         }
                         
                         if (is_array($sessionData)) {
@@ -445,8 +456,11 @@ class SsoSessionHelper
                 // Found matching session, try to get user from it
                 try {
                     $decoded = base64_decode($session->payload);
-                    $sessionData = @unserialize($decoded);
-                    
+                    if ($decoded === false) {
+                        continue;
+                    }
+                    $sessionData = unserialize($decoded, ['allowed_classes' => false]);
+
                     if (!is_array($sessionData)) {
                         continue;
                     }
@@ -621,10 +635,13 @@ class SsoSessionHelper
                 foreach ($recentSessions as $session) {
                     try {
                         $checkedCount++;
-                        
+
                         $decoded = base64_decode($session->payload);
-                        $sessionData = @unserialize($decoded);
-                        
+                        if ($decoded === false) {
+                            continue;
+                        }
+                        $sessionData = unserialize($decoded, ['allowed_classes' => false]);
+
                         if (!is_array($sessionData)) {
                             continue;
                         }
@@ -704,11 +721,11 @@ class SsoSessionHelper
             return false;
         } finally {
             // Restore original timeout settings
-            if (isset($originalTimeout) && $originalTimeout !== false) {
-                set_time_limit($originalTimeout);
+            if (isset($originalTimeout) && $originalTimeout !== false && is_numeric($originalTimeout)) {
+                set_time_limit((int)$originalTimeout);
             }
-            if (isset($originalSocketTimeout) && $originalSocketTimeout !== false) {
-                ini_set('default_socket_timeout', $originalSocketTimeout);
+            if (isset($originalSocketTimeout) && $originalSocketTimeout !== false && is_numeric($originalSocketTimeout)) {
+                ini_set('default_socket_timeout', (float)$originalSocketTimeout);
             }
         }
     }

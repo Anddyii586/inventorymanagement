@@ -230,7 +230,7 @@ class SsoController extends Controller
                             
                             // Try to decode session and extract UID
                             try {
-                                $decodedSession = unserialize($session->payload);
+                                $decodedSession = unserialize($session->payload, ['allowed_classes' => false]);
                                 $sessionData['session_keys'] = array_keys($decodedSession);
                                 $sessionData['session_data_sample'] = array_slice($decodedSession, 0, 10, true);
                                 
@@ -259,7 +259,11 @@ class SsoController extends Controller
                                 $sessionData['uid_found'] = $uid;
                             } catch (\Exception $e) {
                                 try {
-                                    $decodedSession = unserialize(base64_decode($session->payload));
+                                    $decoded = base64_decode($session->payload);
+                                    if ($decoded === false) {
+                                        throw new \Exception('Base64 decode failed');
+                                    }
+                                    $decodedSession = unserialize($decoded, ['allowed_classes' => false]);
                                     $sessionData['session_keys'] = array_keys($decodedSession);
                                     $sessionData['session_data_sample'] = array_slice($decodedSession, 0, 10, true);
                                     
@@ -288,6 +292,7 @@ class SsoController extends Controller
                                     $sessionData['uid_found'] = $uid;
                                 } catch (\Exception $e2) {
                                     $sessionData['session_decode_error'] = $e2->getMessage();
+                                    \Log::debug('SSO Controller: Error decoding session payload', ['error' => $e2->getMessage()]);
                                 }
                             }
                         } else {
@@ -630,4 +635,3 @@ class SsoController extends Controller
         }
     }
 }
-
