@@ -26,6 +26,7 @@ class KoreksiPencatatan extends Page implements HasForms
     protected static string $view = 'filament.pages.koreksi-pencatatan';
 
     public ?array $data = [];
+    public $koreksiList = [];
 
     public function mount(): void
     {
@@ -44,6 +45,16 @@ class KoreksiPencatatan extends Page implements HasForms
                 ]
             ],
         ]);
+
+        $this->loadKoreksiList();
+    }
+
+    public function loadKoreksiList(): void
+    {
+        $this->koreksiList = KoreksiPencatatanModel::with('asset')
+            ->latest()
+            ->get()
+            ->toArray();
     }
 
     public function form(Form $form): Form
@@ -206,6 +217,9 @@ class KoreksiPencatatan extends Page implements HasForms
 
             // Reset form to initial state
             $this->reset();
+
+            // Refresh the list
+            $this->loadKoreksiList();
 
         } catch (\Exception $e) {
             Notification::make()
